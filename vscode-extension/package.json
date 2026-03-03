@@ -1,0 +1,15 @@
+{
+  "name": "claude-session-labels",
+  "displayName": "Claude Session Labels",
+  "publisher": "dxrayhq",
+  "description": "Auto-rename VS Code terminal tabs to match Claude Code session labels",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dxrayhq/claude-session-labels"
+  },
+  "engines": { "vscode": "^1.80.0" },
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js"
+}
