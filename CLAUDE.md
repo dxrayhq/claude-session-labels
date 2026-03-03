@@ -16,43 +16,56 @@ Make `save-label.sh` and `statusline.sh` executable (`chmod +x`).
 
 ### 2. Merge settings into ~/.claude/settings.json
 
-Read the user's existing `~/.claude/settings.json` first. Merge (do NOT overwrite) the following:
+Read the user's existing `~/.claude/settings.json` first. Merge (do NOT overwrite) the entries below.
 
-**hooks.SessionStart** - add this hook (append to existing array if any):
+CRITICAL: The hooks format requires a NESTED structure. Each event contains an array of rule groups, and each rule group has a `hooks` array inside it. Do NOT flatten this structure.
+
+After merging, the hooks section should look like this (the user may have other entries too):
+
 ```json
 {
-  "hooks": [
-    {
-      "type": "command",
-      "command": "bash -c 'INPUT=$(cat); SID=$(echo \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get(\\\"session_id\\\",\\\"\\\"))\" 2>/dev/null); if [ -n \"$SID\" ] && [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"export CLAUDE_SESSION_ID=\\\"$SID\\\"\" >> \"$CLAUDE_ENV_FILE\"; fi'"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'INPUT=$(cat); SID=$(echo \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get(\\\"session_id\\\",\\\"\\\"))\" 2>/dev/null); if [ -n \"$SID\" ] && [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"export CLAUDE_SESSION_ID=\\\"$SID\\\"\" >> \"$CLAUDE_ENV_FILE\"; fi'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/label-inject.py"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(~/.claude/hooks/save-label.sh:*)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/hooks/statusline.sh"
+  }
 }
 ```
 
-**hooks.UserPromptSubmit** - add this hook (append to existing array if any):
+WRONG (will cause "Expected array" error):
 ```json
-{
-  "hooks": [
-    {
-      "type": "command",
-      "command": "python3 ~/.claude/hooks/label-inject.py"
-    }
-  ]
-}
+"SessionStart": [{ "type": "command", "command": "..." }]
 ```
 
-**permissions.allow** - add this entry (append to existing array if any):
-```
-"Bash(~/.claude/hooks/save-label.sh:*)"
-```
-
-**statusLine** - set this (warn user if they already have a statusLine configured):
+CORRECT (note the nested `hooks` array):
 ```json
-{
-  "type": "command",
-  "command": "~/.claude/hooks/statusline.sh"
-}
+"SessionStart": [{ "hooks": [{ "type": "command", "command": "..." }] }]
 ```
 
 ### 3. VS Code extension (optional)
