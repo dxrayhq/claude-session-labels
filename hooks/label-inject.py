@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """UserPromptSubmit hook for Claude Code session labeling.
 
-On first prompt: injects an instruction for Claude to generate a session label.
-On every prompt: writes shell PID -> session_id mapping (for the VS Code extension).
+On first prompt: generates a label from the user's message and saves it.
+On every prompt: writes shell PID -> session_id mapping and "working" status.
 
 Install: add to ~/.claude/settings.json under hooks.UserPromptSubmit
 """
@@ -15,11 +15,22 @@ if not session_id:
 
 labels_file = os.path.expanduser('~/.claude/session-labels.json')
 pid_map_file = os.path.expanduser('~/.claude/pid-to-session.json')
+status_file = os.path.expanduser('~/.claude/session-status.json')
 try:
     with open(labels_file) as f:
         labels = json.load(f)
 except:
     labels = {}
+
+# Write "working" status for VS Code extension tab indicator
+try:
+    with open(status_file) as f:
+        statuses = json.load(f)
+except:
+    statuses = {}
+statuses[session_id] = 'working'
+with open(status_file, 'w') as f:
+    json.dump(statuses, f, ensure_ascii=False, indent=2)
 
 # Find the OUTERMOST shell PID (terminal shell, not Claude's subprocess).
 # Walks the process tree upward and picks the last shell encountered.
@@ -53,18 +64,18 @@ if shell_pid:
     with open(pid_map_file, 'w') as f:
         json.dump(pid_map, f, ensure_ascii=False, indent=2)
 
+# If label already exists, nothing more to do
 label = labels.get(session_id)
-
 if label:
     sys.exit(0)
 
-# No label yet - inject instruction for Claude
+# No label yet - inject instruction for Claude to generate one
 print("""[Session label needed. Run this as the LAST action in your response (after all other tool calls):
-~/.claude/hooks/save-label.sh "emoji description"
+~/.claude/hooks/save-label.sh "emoji описание"
 
 Emoji + short description (up to 30 chars) of the USER'S GOAL - what THEY want to achieve, NOT what you (Claude) are doing to help them.
 
-User says "find my resume, I want to update LinkedIn" -> "update LinkedIn profile" (NOT "search for resume")
-User says "where's the auth code? there's a bug" -> "fix auth bug" (NOT "search auth code")
+User says "найди моё резюме, хочу линкедин обновить" -> "обновить LinkedIn" (NOT "поиск резюме")
+User says "где код авторизации? там баг" -> "фикс бага авторизации" (NOT "поиск кода авторизации")
 
 Use the user's language. No comments about the label.]""")

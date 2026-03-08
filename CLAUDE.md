@@ -11,6 +11,7 @@ Copy these files from the repo to `~/.claude/hooks/`:
 - `hooks/label-inject.py` -> `~/.claude/hooks/label-inject.py`
 - `hooks/save-label.sh` -> `~/.claude/hooks/save-label.sh`
 - `hooks/statusline.sh` -> `~/.claude/hooks/statusline.sh`
+- `hooks/session-status.py` -> `~/.claude/hooks/session-status.py`
 
 Make `save-label.sh` and `statusline.sh` executable (`chmod +x`).
 
@@ -44,6 +45,16 @@ After merging, the hooks section should look like this (the user may have other 
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/session-status.py"
+          }
+        ]
+      }
     ]
   },
   "permissions": {
@@ -73,7 +84,7 @@ CORRECT (note the nested `hooks` array):
 Ask the user if they want the VS Code terminal tab renaming extension.
 If yes, copy `vscode-extension/` to `~/.vscode/extensions/claude-session-labels/` and tell them to reload VS Code.
 
-Note: this extension is a workaround that steals focus briefly. Not everyone wants it.
+Note: this extension sends `/rename` to terminals via `sendText()` only when Claude is idle (triggered by the Stop hook). It uses persistent state (VS Code globalState, keyed by session_id) to avoid re-renaming sessions that already have the correct label. Not everyone wants it.
 
 ### 4. Verify
 

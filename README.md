@@ -13,6 +13,7 @@ When you have 3+ Claude Code sessions open, they all look the same. You can't te
 On the first prompt in a new session, Claude is asked to generate a short label (emoji + description) based on what you're working on. The label is saved to a JSON file and displayed in the Claude Code status line.
 
 **Flow:**
+
 1. You send a prompt to Claude Code
 2. A `UserPromptSubmit` hook injects a labeling instruction (only on the first prompt)
 3. Claude generates a label and saves it via `save-label.sh`
@@ -75,31 +76,29 @@ Add these to your `~/.claude/settings.json`:
           {
             "type": "command",
             // Exports CLAUDE_SESSION_ID so save-label.sh can use it
-            "command": "bash -c 'INPUT=$(cat); SID=$(echo \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get(\\\"session_id\\\",\\\"\\\"))\" 2>/dev/null); if [ -n \"$SID\" ] && [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"export CLAUDE_SESSION_ID=\\\"$SID\\\"\" >> \"$CLAUDE_ENV_FILE\"; fi'"
-          }
-        ]
-      }
+            "command": "bash -c 'INPUT=$(cat); SID=$(echo \"$INPUT\" | python3 -c \"import sys,json; print(json.load(sys.stdin).get(\\\"session_id\\\",\\\"\\\"))\" 2>/dev/null); if [ -n \"$SID\" ] && [ -n \"$CLAUDE_ENV_FILE\" ]; then echo \"export CLAUDE_SESSION_ID=\\\"$SID\\\"\" >> \"$CLAUDE_ENV_FILE\"; fi'",
+          },
+        ],
+      },
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/label-inject.py"
-          }
-        ]
-      }
-    ]
+            "command": "python3 ~/.claude/hooks/label-inject.py",
+          },
+        ],
+      },
+    ],
   },
   "permissions": {
-    "allow": [
-      "Bash(~/.claude/hooks/save-label.sh:*)"
-    ]
+    "allow": ["Bash(~/.claude/hooks/save-label.sh:*)"],
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/hooks/statusline.sh"
-  }
+    "command": "~/.claude/hooks/statusline.sh",
+  },
 }
 ```
 
@@ -113,7 +112,7 @@ Add these to your `~/.claude/settings.json`:
 >
 > Tracking issue: [anthropics/claude-code#25045](https://github.com/anthropics/claude-code/issues/25045)
 
-The extension watches `session-labels.json` for changes and sends `/rename` to each Claude Code terminal when a new label appears.
+The extension watches `session-labels.json` and `session-status.json` for changes. It sends `/rename` only when Claude is idle (after the `Stop` hook fires), preventing interruption of Claude's work.
 
 ### Install
 
@@ -126,16 +125,16 @@ cp -r vscode-extension ~/.vscode/extensions/claude-session-labels
 
 ### How it works
 
-1. `label-inject.py` also writes a `shell PID -> session ID` mapping to `~/.claude/pid-to-session.json`
-2. The extension uses VS Code's `terminal.processId` API to match terminals to sessions
-3. When a label changes, it sends `/rename emoji label` to the matching terminal
+1. `label-inject.py` writes a `shell PID -> session ID` mapping and sets status to `"working"`
+2. `session-status.py` (Stop hook) sets status to `"idle"` when Claude finishes
+3. The extension watches both files and sends `/rename` only when status is `"idle"`
 4. Pattern: text, 300ms pause, Escape (dismiss autocomplete), 100ms pause, Enter (submit)
+5. Renamed sessions are tracked in VS Code's `globalState` (keyed by session_id), surviving reloads
 
 ### Known limitations
 
 - **Focus stealing**: VS Code switches focus to the terminal when sending text. No public API workaround exists.
 - **First prompt only**: PID mapping is created on the first prompt. Terminals opened before any prompt won't be mapped.
-- **Timing**: The `/rename` command is sent after Claude writes the label. If Claude is mid-response, it may interfere.
 
 ## Customization
 
@@ -149,27 +148,29 @@ Edit `hooks/statusline.sh` to change what's displayed. The script receives JSON 
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/hooks/label-inject.py` | UserPromptSubmit hook: injects labeling instruction + writes PID mapping |
-| `~/.claude/hooks/save-label.sh` | Called by Claude to persist the label |
-| `~/.claude/hooks/statusline.sh` | Status line: reads label and displays it |
-| `~/.claude/session-labels.json` | Label store: `{session_id: "emoji label"}` (created automatically) |
-| `~/.claude/pid-to-session.json` | PID mapping: `{shell_pid: session_id}` (created automatically) |
+| File                              | Purpose                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `~/.claude/hooks/label-inject.py`  | UserPromptSubmit hook: injects labeling instruction + writes PID mapping + sets "working" status |
+| `~/.claude/hooks/save-label.sh`    | Called by Claude to persist the label                                                           |
+| `~/.claude/hooks/session-status.py`| Stop hook: sets session status to "idle" when Claude finishes                                   |
+| `~/.claude/hooks/statusline.sh`    | Status line: reads label and displays it                                                        |
+| `~/.claude/session-labels.json`    | Label store: `{session_id: "emoji label"}` (created automatically)                              |
+| `~/.claude/session-status.json`    | Session status: `{session_id: "working"|"idle"}` (created automatically)                        |
+| `~/.claude/pid-to-session.json`    | PID mapping: `{shell_pid: session_id}` (created automatically)                                  |
 
 ## Alternatives & Related
 
-| | claude-session-labels (this) | [claude-code-terminal-title](https://github.com/bluzername/claude-code-terminal-title) |
-|---|---|---|
-| **Approach** | Claude Code hooks + statusline API | Skill (SKILL.md) + zsh precmd patch |
-| **Where labels show** | Status line (built-in) + VS Code tabs | Terminal window title (OSC sequences) |
-| **Works in VS Code** | Yes (status line + tab rename) | No (Ink overwrites OSC on every render) |
-| **Works in iTerm2 / Terminal.app** | Status line only (window title unchanged) | Window title via precmd race with Ink |
-| **Auto-generates labels** | Yes (hook injects instruction on first prompt) | Yes (skill instructs Claude) |
-| **Requires patching .zshrc** | No | Yes (setup-zsh.sh) |
-| **Context usage** | Yes (`ctx N%` in status line) | No |
-| **Session color coding** | Yes (hash-based per-session color) | No |
-| **Persistence across resume** | Yes (JSON store) | File-based (5 min freshness window) |
+|                                    | claude-session-labels (this)                   | [claude-code-terminal-title](https://github.com/bluzername/claude-code-terminal-title) |
+| ---------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Approach**                       | Claude Code hooks + statusline API             | Skill (SKILL.md) + zsh precmd patch                                                    |
+| **Where labels show**              | Status line (built-in) + VS Code tabs          | Terminal window title (OSC sequences)                                                  |
+| **Works in VS Code**               | Yes (status line + tab rename)                 | No (Ink overwrites OSC on every render)                                                |
+| **Works in iTerm2 / Terminal.app** | Status line only (window title unchanged)      | Window title via precmd race with Ink                                                  |
+| **Auto-generates labels**          | Yes (hook injects instruction on first prompt) | Yes (skill instructs Claude)                                                           |
+| **Requires patching .zshrc**       | No                                             | Yes (setup-zsh.sh)                                                                     |
+| **Context usage**                  | Yes (`ctx N%` in status line)                  | No                                                                                     |
+| **Session color coding**           | Yes (hash-based per-session color)             | No                                                                                     |
+| **Persistence across resume**      | Yes (JSON store)                               | File-based (5 min freshness window)                                                    |
 
 **TL;DR:** This project uses Claude Code's built-in statusline API, which Ink can't overwrite. `claude-code-terminal-title` uses OSC escape sequences for the terminal window title, which requires a zsh precmd hook to keep re-applying (because Ink overwrites them on render). Different trade-offs - can be used together.
 
