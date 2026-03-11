@@ -114,6 +114,16 @@ Add these to your `~/.claude/settings.json`:
 
 The extension watches `session-labels.json` and `session-status.json` for changes. It sends `/rename` only when Claude is idle (after the `Stop` hook fires), preventing interruption of Claude's work.
 
+### Prerequisites
+
+Add this to your VS Code `settings.json` (Cmd+Shift+P -> "Preferences: Open User Settings (JSON)"):
+
+```json
+"terminal.integrated.tabs.title": "${sequence}"
+```
+
+Without this, VS Code ignores `/rename` and keeps showing the process name (e.g. "zsh").
+
 ### Install
 
 ```bash

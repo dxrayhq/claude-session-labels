@@ -79,13 +79,23 @@ CORRECT (note the nested `hooks` array):
 "SessionStart": [{ "hooks": [{ "type": "command", "command": "..." }] }]
 ```
 
-### 3. VS Code extension (optional)
+### 3. VS Code terminal tab title setting
+
+For `/rename` to actually change the visible tab title, VS Code must use the `${sequence}` variable in the tab title template. Ask the user to add this to their VS Code `settings.json`:
+
+```json
+"terminal.integrated.tabs.title": "${sequence}"
+```
+
+Without this, VS Code ignores the rename and keeps showing the process name (e.g. "zsh").
+
+### 4. VS Code extension (optional)
 
 Ask the user if they want the VS Code terminal tab renaming extension.
 If yes, copy `vscode-extension/` to `~/.vscode/extensions/claude-session-labels/` and tell them to reload VS Code.
 
 Note: this extension sends `/rename` to terminals via `sendText()` only when Claude is idle (triggered by the Stop hook). It uses persistent state (VS Code globalState, keyed by session_id) to avoid re-renaming sessions that already have the correct label. Not everyone wants it.
 
-### 4. Verify
+### 5. Verify
 
 Tell the user to restart Claude Code and send any prompt. The label should appear in the status line after 1-2 messages.
